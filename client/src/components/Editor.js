@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import "codemirror/mode/javascript/javascript";
+import "codemirror/mode/clike/clike";
 import "codemirror/theme/dracula.css";
 import "codemirror/addon/edit/closetag";
 import "codemirror/addon/edit/closebrackets";
@@ -7,18 +8,32 @@ import "codemirror/lib/codemirror.css";
 import CodeMirror from "codemirror";
 import { ACTIONS } from "../Actions";
 
-function Editor({ socketRef, roomId, onCodeChange }) {
+function Editor({ socketRef, roomId, onCodeChange, language = 'cpp' }) {
   const editorRef = useRef(null);
   useEffect(() => {
     const init = async () => {
+      const getMode = () => {
+        switch(language) {
+          case 'cpp':
+            return { name: "text/x-c++src" };
+          case 'javascript':
+            return { name: "javascript", json: true };
+          default:
+            return { name: "text/x-c++src" };
+        }
+      };
+
       const editor = CodeMirror.fromTextArea(
         document.getElementById("realtimeEditor"),
         {
-          mode: { name: "javascript", json: true },
+          mode: getMode(),
           theme: "dracula",
           autoCloseTags: true,
           autoCloseBrackets: true,
           lineNumbers: true,
+          indentUnit: 2,
+          smartIndent: true,
+          matchBrackets: true,
         }
       );
       // for sync the code

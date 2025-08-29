@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Client from "./Client";
 import Editor from "./Editor";
+import Console from "./Console";
 import { initSocket } from "../Socket";
 import { ACTIONS } from "../Actions";
 import {
@@ -13,6 +14,10 @@ import { toast } from "react-hot-toast";
 
 function EditorPage() {
   const [clients, setClients] = useState([]);
+  const [language, setLanguage] = useState('cpp');
+  const [output, setOutput] = useState('');
+  const [error, setError] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
   const codeRef = useRef(null);
 
   const Location = useLocation();
@@ -61,6 +66,31 @@ function EditorPage() {
           return prev.filter((client) => client.socketId !== socketId);
         });
       });
+
+      // listening for code output
+      socketRef.current.on(ACTIONS.CODE_OUTPUT, ({ output, error, success, type }) => {
+        console.log('📝 Code execution result received:', { output, error, success, type });
+        
+        setIsRunning(false);
+        setOutput(output || '');
+        setError(error || '');
+        
+        // Log to console for debugging
+        if (output) {
+          console.log('✅ Code Output:', output);
+        }
+        if (error) {
+          console.log('❌ Code Error:', error);
+        }
+        
+        if (!success) {
+          console.error('💥 Execution failed:', type);
+          toast.error(`Execution failed: ${type}`);
+        } else {
+          console.log('🎉 Code executed successfully!');
+          toast.success('Code executed successfully!');
+        }
+      });
     };
     init();
 
@@ -69,6 +99,7 @@ function EditorPage() {
       socketRef.current && socketRef.current.disconnect();
       socketRef.current.off(ACTIONS.JOINED);
       socketRef.current.off(ACTIONS.DISCONNECTED);
+      socketRef.current.off(ACTIONS.CODE_OUTPUT);
     };
   }, []);
 
@@ -88,6 +119,33 @@ function EditorPage() {
 
   const leaveRoom = async () => {
     navigate("/");
+  };
+
+  const runCode = () => {
+    if (!codeRef.current || !codeRef.current.trim()) {
+      toast.error('Please write some code first!');
+      return;
+    }
+
+    console.log('🚀 Running code:', {
+      language,
+      codeLength: codeRef.current.length,
+      roomId
+    });
+
+    setIsRunning(true);
+    setOutput('');
+    setError('');
+    
+    const payload = {
+      roomId,
+      code: codeRef.current,
+      language: language
+    };
+    
+    console.log('📤 Emitting RUN_CODE event:', payload);
+    
+    socketRef.current.emit(ACTIONS.RUN_CODE, payload);
   };
 
   return (
@@ -115,6 +173,27 @@ function EditorPage() {
           </div>
 
           <hr />
+          
+          {/* Language Selector */}
+          <div className="mb-3">
+            <label className="form-label text-light">Language:</label>
+            <select 
+              className="form-select" 
+              value={language} 
+              onChange={(e) => setLanguage(e.target.value)}
+            >
+              <option value="cpp">C++</option>
+              <option value="javascript" disabled>JavaScript (Coming Soon)</option>
+            </select>
+          </div>
+
+          {/* Language Info */}
+          <div className="mb-3 p-2 rounded" style={{ backgroundColor: "#2d2d2d" }}>
+            <small className="text-muted">Currently editing:</small>
+            <div className="text-light">main.cpp</div>
+          </div>
+
+          <hr />
           {/* Buttons */}
           <div className="mt-auto ">
             <button className="btn btn-success" onClick={copyRoomId}>
@@ -130,14 +209,63 @@ function EditorPage() {
         </div>
 
         {/* Editor panel */}
-        <div className="col-md-10 text-light d-flex flex-column h-100 ">
-          <Editor
-            socketRef={socketRef}
-            roomId={roomId}
-            onCodeChange={(code) => {
-              codeRef.current = code;
-            }}
-          />
+        <div className="col-md-10 text-light d-flex flex-column h-100" style={{ backgroundColor: "#1e1e1e" }}>
+          {/* Editor Section */}
+          <div style={{ height: "60%", position: "relative" }}>
+            {/* Editor Header */}
+            <div className="d-flex align-items-center px-3 py-2" 
+                 style={{ backgroundColor: "#2d2d2d", borderBottom: "1px solid #444" }}>
+              <div className="d-flex align-items-center">
+                <span className="text-light me-3">main.cpp</span>
+                <small className="text-muted">{language.toUpperCase()}</small>
+              </div>
+              <div className="ms-auto">
+                <button 
+                  className="btn btn-success btn-sm"
+                  onClick={runCode}
+                  disabled={isRunning}
+                >
+                  {isRunning ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-play me-1"></i>
+                      Run
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {/* Editor */}
+            <div style={{ height: "calc(100% - 50px)" }}>
+              <Editor
+                socketRef={socketRef}
+                roomId={roomId}
+                language={language}
+                onCodeChange={(code) => {
+                  codeRef.current = code;
+                }}
+              />
+            </div>
+          </div>
+          
+          {/* Console Section */}
+          <div style={{ height: "40%", borderTop: "1px solid #444" }}>
+            <Console 
+              output={output} 
+              error={error} 
+              isRunning={isRunning}
+              onInput={(input) => {
+                console.log('📥 User input:', input);
+                // TODO: Send input to running program
+                // For now, just log it - we'll implement program input later
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
